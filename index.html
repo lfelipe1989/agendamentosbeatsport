@@ -341,10 +341,10 @@ async function submitBooking(){
   };
   var btn = document.getElementById('btn-submit');
   btn.disabled = true; btn.textContent = 'Salvando...';
-  var res = await sb.from('beat_sports_exp').insert([booking]).select().single();
+  var res = await sb.from('beat_sports_exp').insert([booking]);
   btn.disabled = false; btn.textContent = 'Confirmar agendamento';
   if (res.error){ console.error(res.error); toast('Não foi possível salvar. Tente novamente.'); return; }
-  showConfirmation(res.data);
+  showConfirmation(booking);
 }
 document.getElementById('btn-submit').addEventListener('click', submitBooking);
 document.getElementById('form-client').addEventListener('keydown', function(e){
