@@ -177,6 +177,25 @@
   .danger-zone{margin-top:30px;border-top:1px dashed var(--line);padding-top:20px;}
   .danger-zone p{font-size:.8rem;color:var(--ink-soft);margin-bottom:10px;}
   .last-updated{font-size:.75rem;color:var(--ink-soft);margin-bottom:14px;}
+
+  .horarios-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;}
+  @media (max-width:880px){.horarios-grid{grid-template-columns:1fr;}}
+  .horarios-card{background:#fff;border-radius:14px;padding:18px;box-shadow:var(--shadow);}
+  .horarios-card h3{font-size:.95rem;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .slot-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--sand-deep);}
+  .slot-row:last-child{border-bottom:none;}
+  .slot-row .slot-time{font-family:var(--font-mono);font-weight:600;width:60px;}
+  .slot-row .slot-time.off{color:var(--ink-soft);text-decoration:line-through;}
+  .switch{position:relative;width:40px;height:22px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch .slider{position:absolute;inset:0;background:var(--line);border-radius:99px;cursor:pointer;transition:background .15s;}
+  .switch .slider::before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .15s;}
+  .switch input:checked + .slider{background:var(--turquoise);}
+  .switch input:checked + .slider::before{transform:translateX(18px);}
+  .slot-row .slot-del{margin-left:auto;background:transparent;border:none;color:var(--danger);font-size:.78rem;font-weight:600;cursor:pointer;}
+  .add-slot-row{display:flex;gap:8px;margin-top:12px;}
+  .add-slot-row input{flex:1;padding:8px 10px;border:1.5px solid var(--line);border-radius:9px;font-size:.85rem;}
+  .add-slot-row button{padding:8px 14px;}
 </style>
 </head>
 <body>
@@ -219,6 +238,7 @@
       <button class="tab-btn" data-tab="week">Aulas da semana</button>
       <button class="tab-btn" data-tab="leads">Status dos leads</button>
       <button class="tab-btn" data-tab="contacts">Contato</button>
+      <button class="tab-btn" data-tab="horarios">Horários</button>
     </div>
   </div>
   <div class="admin-body">
@@ -228,6 +248,7 @@
     <div class="tab-panel" id="tab-week"></div>
     <div class="tab-panel" id="tab-leads"></div>
     <div class="tab-panel" id="tab-contacts"></div>
+    <div class="tab-panel" id="tab-horarios"></div>
   </div>
 </section>
 
@@ -385,6 +406,7 @@ document.getElementById('btn-logout').addEventListener('click', async function()
 async function enterAdmin(){
   showScreen('view-admin');
   await refreshBookings();
+  STATE.timeSlots = await loadTimeSlots();
   switchTab('overview');
   if (window._adminPoll) clearInterval(window._adminPoll);
   window._adminPoll = setInterval(refreshBookings, 30000);
@@ -399,7 +421,7 @@ document.getElementById('btn-copy-link').addEventListener('click', function(){
 });
 
 /* ---------------- DATA LAYER (Supabase) ---------------- */
-var STATE = { bookings: [], activeTab: 'overview' };
+var STATE = { bookings: [], timeSlots: [], activeTab: 'overview' };
 
 async function loadAllBookings(){
   var res = await sb.from('beat_sports_exp').select('*').order('data',{ascending:true}).order('horario',{ascending:true});
@@ -426,6 +448,31 @@ function updateLocal(updated){
   if (idx !== -1) STATE.bookings[idx] = updated;
 }
 
+async function loadTimeSlots(){
+  var res = await sb.from('beat_sports_horarios').select('*').order('modalidade',{ascending:true}).order('horario',{ascending:true});
+  if (res.error){ console.error(res.error); toast('Não foi possível carregar os horários.'); return []; }
+  return res.data;
+}
+async function insertTimeSlot(modalidade, horario){
+  var res = await sb.from('beat_sports_horarios').insert([{modalidade:modalidade, horario:horario, ativo:true}]).select().single();
+  if (res.error){
+    console.error(res.error);
+    if (res.error.code === '23505') toast('Esse horário já existe para essa modalidade.');
+    else toast('Não foi possível adicionar o horário.');
+    return null;
+  }
+  return res.data;
+}
+async function setTimeSlotAtivo(id, ativo){
+  var res = await sb.from('beat_sports_horarios').update({ativo:ativo}).eq('id', id).select().single();
+  if (res.error){ console.error(res.error); toast('Não foi possível atualizar o horário.'); return null; }
+  return res.data;
+}
+async function deleteTimeSlot(id){
+  var res = await sb.from('beat_sports_horarios').delete().eq('id', id);
+  if (res.error){ console.error(res.error); toast('Não foi possível remover o horário.'); }
+}
+
 async function refreshBookings(){
   document.getElementById('last-updated').textContent = 'Atualizando...';
   STATE.bookings = await loadAllBookings();
@@ -440,6 +487,7 @@ function renderActiveTab(){
   else if (STATE.activeTab==='week') renderWeek();
   else if (STATE.activeTab==='leads') renderLeads();
   else if (STATE.activeTab==='contacts') renderContacts();
+  else if (STATE.activeTab==='horarios') renderHorarios();
 }
 document.querySelectorAll('.tab-btn').forEach(function(btn){
   btn.addEventListener('click', function(){ switchTab(btn.getAttribute('data-tab')); });
@@ -651,7 +699,67 @@ function exportCSV(list){
   toast('CSV exportado.');
 }
 
-/* ---------------- MANUAL BOOKING MODAL ---------------- */
+/* ---------------- HORÁRIOS DISPONÍVEIS (por modalidade) ---------------- */
+function renderHorarios(){
+  var el = document.getElementById('tab-horarios');
+  el.innerHTML = '<p style="font-size:.85rem;color:var(--ink-soft);margin-bottom:18px;">Desative um horário quando a turma estiver cheia ou não houver aula naquele horário — ele deixa de aparecer no formulário do cliente, mas não é apagado. Use o "x" para remover de vez.</p>'+
+    '<div class="horarios-grid">'+
+      MODALIDADES.map(function(m){
+        var slots = STATE.timeSlots.filter(function(s){ return s.modalidade===m.id; });
+        return '<div class="horarios-card" data-mod="'+m.id+'">'+
+          '<h3>'+ballIcon(m.color,18)+' '+m.id+'</h3>'+
+          '<div class="slot-list">'+
+            (slots.length ? slots.map(function(s){
+              return '<div class="slot-row" data-id="'+s.id+'">'+
+                '<span class="slot-time'+(s.ativo?'':' off')+'">'+s.horario.slice(0,5)+'</span>'+
+                '<label class="switch"><input type="checkbox" class="slot-toggle" data-id="'+s.id+'" '+(s.ativo?'checked':'')+'><span class="slider"></span></label>'+
+                '<button type="button" class="slot-del" data-id="'+s.id+'">remover</button>'+
+              '</div>';
+            }).join('') : '<p style="font-size:.82rem;color:var(--ink-soft);">Nenhum horário cadastrado ainda.</p>')+
+          '</div>'+
+          '<div class="add-slot-row"><input type="time" step="900" class="new-slot-time" placeholder="Novo horário"><button type="button" class="btn btn-ghost btn-sm add-slot-btn">+ Adicionar</button></div>'+
+        '</div>';
+      }).join('')+
+    '</div>';
+
+  el.querySelectorAll('.slot-toggle').forEach(function(input){
+    input.addEventListener('change', async function(){
+      var id = input.dataset.id;
+      var updated = await setTimeSlotAtivo(id, input.checked);
+      if (updated){
+        var idx = STATE.timeSlots.findIndex(function(s){ return s.id===id; });
+        if (idx!==-1) STATE.timeSlots[idx] = updated;
+        var label = el.querySelector('.slot-row[data-id="'+id+'"] .slot-time');
+        label.classList.toggle('off', !updated.ativo);
+        toast(updated.ativo ? 'Horário ativado.' : 'Horário desativado.');
+      }
+    });
+  });
+  el.querySelectorAll('.slot-del').forEach(function(btn){
+    btn.addEventListener('click', async function(){
+      var id = btn.dataset.id;
+      if (!confirm('Remover este horário definitivamente?')) return;
+      await deleteTimeSlot(id);
+      STATE.timeSlots = STATE.timeSlots.filter(function(s){ return s.id!==id; });
+      renderHorarios();
+    });
+  });
+  el.querySelectorAll('.horarios-card').forEach(function(card){
+    var mod = card.dataset.mod;
+    card.querySelector('.add-slot-btn').addEventListener('click', async function(){
+      var input = card.querySelector('.new-slot-time');
+      if (!input.value){ toast('Escolha um horário antes de adicionar.'); return; }
+      var created = await insertTimeSlot(mod, input.value);
+      if (created){
+        STATE.timeSlots.push(created);
+        toast('Horário adicionado.');
+        renderHorarios();
+      }
+    });
+  });
+}
+
+
 var selectedModManual = null;
 renderModPicker('mod-picker-manual', function(id){ selectedModManual = id; });
 document.getElementById('m-data').min = todayISO();
