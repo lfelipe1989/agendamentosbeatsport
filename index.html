@@ -157,7 +157,9 @@
             </div>
             <div class="field" data-field="horario">
               <label for="c-hora">Horário</label>
-              <input id="c-hora" type="time" step="900">
+              <select id="c-hora">
+                <option value="">Selecione a modalidade primeiro</option>
+              </select>
               <p class="err">Escolha um horário.</p>
             </div>
           </div>
@@ -263,6 +265,28 @@ function showScreen(id){
 }
 
 var selectedMod = null;
+var TIME_SLOTS = {}; // { 'Altinha': ['08:00','09:00'], ... } only ativo=true, already sorted
+function populateHoraSelect(modId){
+  var sel = document.getElementById('c-hora');
+  var times = TIME_SLOTS[modId] || [];
+  if (!times.length){
+    sel.innerHTML = '<option value="">Nenhum horário disponível para esta modalidade</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Selecione um horário</option>' +
+    times.map(function(t){ return '<option value="'+t+'">'+t.slice(0,5)+'</option>'; }).join('');
+}
+async function loadTimeSlots(){
+  var res = await sb.from('beat_sports_horarios').select('modalidade,horario').eq('ativo', true).order('horario',{ascending:true});
+  if (res.error){ console.error(res.error); return; }
+  TIME_SLOTS = {};
+  res.data.forEach(function(row){
+    if (!TIME_SLOTS[row.modalidade]) TIME_SLOTS[row.modalidade] = [];
+    TIME_SLOTS[row.modalidade].push(row.horario);
+  });
+}
+loadTimeSlots();
+
 function renderModPicker(){
   var el = document.getElementById('mod-picker');
   el.innerHTML = MODALIDADES.map(function(m){
@@ -274,6 +298,7 @@ function renderModPicker(){
       Array.prototype.forEach.call(el.querySelectorAll('.mod-chip'), function(b){ b.classList.remove('selected'); });
       btn.classList.add('selected');
       selectedMod = btn.getAttribute('data-mod');
+      populateHoraSelect(selectedMod);
     });
   });
 }
@@ -345,7 +370,8 @@ function showConfirmation(booking){
 }
 
 document.getElementById('btn-new-booking').addEventListener('click', function(){
-  ['c-nome','c-cpf','c-email','c-tel','c-data','c-hora'].forEach(function(id){ document.getElementById(id).value=''; });
+  ['c-nome','c-cpf','c-email','c-tel','c-data'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('c-hora').innerHTML = '<option value="">Selecione a modalidade primeiro</option>';
   selectedMod = null;
   document.querySelectorAll('#mod-picker .mod-chip').forEach(function(b){ b.classList.remove('selected'); });
   document.querySelectorAll('#form-client .field').forEach(function(f){ f.classList.remove('invalid'); });
