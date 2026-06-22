@@ -551,6 +551,9 @@ function attachTicketHandlers(container){
     } else if (t.classList.contains('status-lead-select')){
       var b4 = await patchBooking(t.dataset.id, {status_lead: t.value});
       if (b4){ updateLocal(b4); toast('Status do lead atualizado.'); }
+    } else if (t.classList.contains('retorno-input')){
+      var b5 = await patchBooking(t.dataset.id, {retorno_contato: t.value || null});
+      if (b5){ updateLocal(b5); toast(t.value ? 'Retorno salvo para '+formatDateBR(t.value)+'.' : 'Data de retorno removida.'); }
     }
   });
   container.addEventListener('click', function(e){
@@ -680,7 +683,7 @@ function renderContacts(){
     '<select class="f-statusLead"><option value="all">Todos os status de lead</option>'+STATUS_LEAD.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('')+'</select>'+
     '<input type="text" class="f-search" placeholder="Buscar por nome, telefone, e-mail ou CPF...">'+
     '<button class="btn btn-ghost btn-sm" id="btn-export-csv">Exportar CSV</button><span class="count">'+filtered.length+' contato(s)</span></div>'+
-    '<div class="contacts-table-wrap"><table class="contacts"><thead><tr><th>Nome</th><th>Contato</th><th>CPF</th><th>Modalidade</th><th>Aula</th><th>Status aula</th><th>Status lead</th></tr></thead><tbody id="contacts-tbody"></tbody></table></div>';
+    '<div class="contacts-table-wrap"><table class="contacts"><thead><tr><th>Nome</th><th>Contato</th><th>CPF</th><th>Modalidade</th><th>Aula</th><th>Status aula</th><th>Status lead</th><th>Retornar contato em</th></tr></thead><tbody id="contacts-tbody"></tbody></table></div>';
   var modSel=el.querySelector('.f-modalidade'), leadSel=el.querySelector('.f-statusLead'), search=el.querySelector('.f-search');
   modSel.value=toolbarState.contacts.modalidade; leadSel.value=toolbarState.contacts.statusLead; search.value=toolbarState.contacts.search;
   modSel.addEventListener('change', function(){ toolbarState.contacts.modalidade=modSel.value; renderActiveTab(); });
@@ -688,18 +691,27 @@ function renderContacts(){
   var t; search.addEventListener('input', function(){ clearTimeout(t); t=setTimeout(function(){ toolbarState.contacts.search=search.value; renderActiveTab(); },250); });
   var tbody = document.getElementById('contacts-tbody');
   tbody.innerHTML = filtered.length ? filtered.map(function(b){
+    var retorno = b.retorno_contato ? b.retorno_contato.slice(0,10) : '';
+    var retornoDisplay = retorno ? formatDateBR(retorno) : '';
+    var retornoClass = '';
+    if (retorno){
+      var hoje = todayISO();
+      if (retorno < hoje) retornoClass = 'style="color:var(--danger);font-weight:700;"';
+      else if (retorno === hoje) retornoClass = 'style="color:var(--turquoise);font-weight:700;"';
+    }
     return '<tr data-id="'+b.id+'"><td>'+escapeHTML(b.nome)+'</td>'+
       '<td><a class="wa" href="'+waLink(b.telefone)+'" target="_blank" rel="noopener">'+escapeHTML(b.telefone)+'</a><br><span style="color:var(--ink-soft)">'+escapeHTML(b.email)+'</span></td>'+
       '<td class="mono">'+escapeHTML(b.cpf)+'</td><td>'+escapeHTML(b.modalidade)+'</td><td>'+formatDateBR(b.data)+' '+(b.horario?b.horario.slice(0,5):'')+'</td>'+
       '<td><select class="status-aula-select" data-id="'+b.id+'">'+selectOptions(STATUS_AULA,b.status_aula)+'</select></td>'+
-      '<td><select class="status-lead-select" data-id="'+b.id+'">'+selectOptions(STATUS_LEAD,b.status_lead)+'</select></td></tr>';
-  }).join('') : '<tr><td colspan="7"><div class="empty-state">Nenhum contato encontrado com esses filtros.</div></td></tr>';
+      '<td><select class="status-lead-select" data-id="'+b.id+'">'+selectOptions(STATUS_LEAD,b.status_lead)+'</select></td>'+
+      '<td><div style="display:flex;flex-direction:column;gap:4px;"><input type="date" class="retorno-input" data-id="'+b.id+'" value="'+retorno+'" style="padding:5px 8px;border:1.5px solid var(--line);border-radius:8px;font-size:.78rem;"><span '+retornoClass+'>'+retornoDisplay+'</span></div></td></tr>';
+  }).join('') : '<tr><td colspan="8"><div class="empty-state">Nenhum contato encontrado com esses filtros.</div></td></tr>';
   attachTicketHandlers(tbody);
   document.getElementById('btn-export-csv').addEventListener('click', function(){ exportCSV(filtered); });
 }
 function exportCSV(list){
-  var header = ['Nome','CPF','Email','Telefone','Modalidade','Data','Horario','Status da Aula','Motivo','Status do Lead','Origem','Observacoes'];
-  var rows = list.map(function(b){ return [b.nome,b.cpf,b.email,b.telefone,b.modalidade,b.data,b.horario,b.status_aula,b.motivo||'',b.status_lead,b.origem||'',b.observacoes||'']; });
+  var header = ['Nome','CPF','Email','Telefone','Modalidade','Data','Horario','Status da Aula','Motivo','Status do Lead','Origem','Observacoes','Retornar Contato Em'];
+  var rows = list.map(function(b){ return [b.nome,b.cpf,b.email,b.telefone,b.modalidade,b.data,b.horario,b.status_aula,b.motivo||'',b.status_lead,b.origem||'',b.observacoes||'',b.retorno_contato?b.retorno_contato.slice(0,10):''];  });
   var csv = [header].concat(rows).map(function(r){ return r.map(function(f){ return '"'+String(f).replace(/"/g,'""')+'"'; }).join(','); }).join('\n');
   var blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   var url = URL.createObjectURL(blob);
