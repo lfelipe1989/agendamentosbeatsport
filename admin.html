@@ -291,6 +291,48 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Modal de confirmação perigosa (ex: apagar tudo) -->
+<div class="overlay" id="overlay-confirm" style="z-index:300;">
+  <div class="modal-box" style="max-width:400px;text-align:center;">
+    <div style="font-size:2rem;margin-bottom:12px;">⚠️</div>
+    <h2 id="confirm-title" style="font-size:1.1rem;margin-bottom:10px;"></h2>
+    <p id="confirm-desc" style="font-size:.85rem;color:var(--ink-soft);margin-bottom:22px;"></p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button type="button" class="btn btn-ghost" id="confirm-cancel">Cancelar</button>
+      <button type="button" class="btn btn-danger" id="confirm-ok">Sim, apagar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de edição de contato individual -->
+<div class="overlay" id="overlay-edit-contact">
+  <div class="modal-box" style="max-width:540px;">
+    <h2>Editar agendamento</h2>
+    <div id="form-edit-contact">
+      <div class="row2">
+        <div class="field"><label>Nome completo</label><input id="ec-nome" type="text"></div>
+        <div class="field"><label>CPF</label><input id="ec-cpf" type="text" inputmode="numeric" maxlength="14"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Telefone</label><input id="ec-tel" type="text" inputmode="numeric" maxlength="15"></div>
+        <div class="field"><label>E-mail</label><input id="ec-email" type="email"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Data</label><input id="ec-data" type="date"></div>
+        <div class="field"><label>Horário</label><input id="ec-hora" type="time" step="900"></div>
+      </div>
+      <div class="field"><label>Observações</label><textarea id="ec-obs" rows="2" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:10px;font-size:.9rem;resize:vertical;"></textarea></div>
+      <div class="modal-close-row" style="justify-content:space-between;">
+        <button type="button" class="btn btn-danger btn-sm" id="btn-ec-delete">Excluir este agendamento</button>
+        <div style="display:flex;gap:10px;">
+          <button type="button" class="btn btn-ghost" id="btn-ec-cancel">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="btn-ec-save">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
 "use strict";
@@ -447,6 +489,30 @@ async function deleteAllBookings(){
   var res = await sb.from('beat_sports_exp').delete().not('id','is',null);
   if (res.error){ console.error(res.error); toast('Não foi possível apagar.'); }
 }
+async function deleteBooking(id){
+  var res = await sb.from('beat_sports_exp').delete().eq('id', id);
+  if (res.error){ console.error(res.error); toast('Não foi possível excluir.'); return false; }
+  STATE.bookings = STATE.bookings.filter(function(b){ return b.id !== id; });
+  return true;
+}
+
+/* Modal de confirmação genérico — evita confirm() nativo e cliques acidentais */
+var _confirmResolve = null;
+function showConfirmModal(title, desc, btnLabel){
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-desc').textContent = desc;
+  document.getElementById('confirm-ok').textContent = btnLabel || 'Sim, apagar';
+  document.getElementById('overlay-confirm').classList.add('show');
+  return new Promise(function(resolve){ _confirmResolve = resolve; });
+}
+document.getElementById('confirm-cancel').addEventListener('click', function(){
+  document.getElementById('overlay-confirm').classList.remove('show');
+  if (_confirmResolve){ _confirmResolve(false); _confirmResolve = null; }
+});
+document.getElementById('confirm-ok').addEventListener('click', function(){
+  document.getElementById('overlay-confirm').classList.remove('show');
+  if (_confirmResolve){ _confirmResolve(true); _confirmResolve = null; }
+});
 function updateLocal(updated){
   var idx = STATE.bookings.findIndex(function(b){ return b.id === updated.id; });
   if (idx !== -1) STATE.bookings[idx] = updated;
@@ -587,7 +653,12 @@ function renderOverview(){
         '<button class="btn btn-danger btn-sm" id="btn-wipe">Apagar todos os agendamentos</button></div>'+
     '</div>';
   document.getElementById('btn-wipe').addEventListener('click', async function(){
-    if (!confirm('Tem certeza? Isso vai apagar permanentemente todos os agendamentos salvos.')) return;
+    var ok = await showConfirmModal(
+      'Apagar todos os agendamentos?',
+      'Esta ação é permanente e não pode ser desfeita. Todos os leads e agendamentos serão excluídos do banco de dados.',
+      'Sim, apagar tudo'
+    );
+    if (!ok) return;
     await deleteAllBookings();
     toast('Todos os agendamentos foram apagados.');
     await refreshBookings();
@@ -683,7 +754,7 @@ function renderContacts(){
     '<select class="f-statusLead"><option value="all">Todos os status de lead</option>'+STATUS_LEAD.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('')+'</select>'+
     '<input type="text" class="f-search" placeholder="Buscar por nome, telefone, e-mail ou CPF...">'+
     '<button class="btn btn-ghost btn-sm" id="btn-export-csv">Exportar CSV</button><span class="count">'+filtered.length+' contato(s)</span></div>'+
-    '<div class="contacts-table-wrap"><table class="contacts"><thead><tr><th>Nome</th><th>Contato</th><th>CPF</th><th>Modalidade</th><th>Aula</th><th>Status aula</th><th>Status lead</th><th>Retornar contato em</th></tr></thead><tbody id="contacts-tbody"></tbody></table></div>';
+    '<div class="contacts-table-wrap"><table class="contacts"><thead><tr><th>Nome</th><th>Contato</th><th>CPF</th><th>Modalidade</th><th>Aula</th><th>Status aula</th><th>Status lead</th><th>Retornar contato em</th><th></th></tr></thead><tbody id="contacts-tbody"></tbody></table></div>';
   var modSel=el.querySelector('.f-modalidade'), leadSel=el.querySelector('.f-statusLead'), search=el.querySelector('.f-search');
   modSel.value=toolbarState.contacts.modalidade; leadSel.value=toolbarState.contacts.statusLead; search.value=toolbarState.contacts.search;
   modSel.addEventListener('change', function(){ toolbarState.contacts.modalidade=modSel.value; renderActiveTab(); });
@@ -704,8 +775,9 @@ function renderContacts(){
       '<td class="mono">'+escapeHTML(b.cpf)+'</td><td>'+escapeHTML(b.modalidade)+'</td><td>'+formatDateBR(b.data)+' '+(b.horario?b.horario.slice(0,5):'')+'</td>'+
       '<td><select class="status-aula-select" data-id="'+b.id+'">'+selectOptions(STATUS_AULA,b.status_aula)+'</select></td>'+
       '<td><select class="status-lead-select" data-id="'+b.id+'">'+selectOptions(STATUS_LEAD,b.status_lead)+'</select></td>'+
-      '<td><div style="display:flex;flex-direction:column;gap:4px;"><input type="date" class="retorno-input" data-id="'+b.id+'" value="'+retorno+'" style="padding:5px 8px;border:1.5px solid var(--line);border-radius:8px;font-size:.78rem;"><span '+retornoClass+'>'+retornoDisplay+'</span></div></td></tr>';
-  }).join('') : '<tr><td colspan="8"><div class="empty-state">Nenhum contato encontrado com esses filtros.</div></td></tr>';
+      '<td><div style="display:flex;flex-direction:column;gap:4px;"><input type="date" class="retorno-input" data-id="'+b.id+'" value="'+retorno+'" style="padding:5px 8px;border:1.5px solid var(--line);border-radius:8px;font-size:.78rem;"><span '+retornoClass+'>'+retornoDisplay+'</span></div></td>'+
+      '<td><button type="button" class="btn btn-ghost btn-sm edit-contact-btn" data-id="'+b.id+'">Editar</button></td></tr>';
+  }).join('') : '<tr><td colspan="9"><div class="empty-state">Nenhum contato encontrado com esses filtros.</div></td></tr>';
   attachTicketHandlers(tbody);
   document.getElementById('btn-export-csv').addEventListener('click', function(){ exportCSV(filtered); });
 }
@@ -719,6 +791,69 @@ function exportCSV(list){
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   toast('CSV exportado.');
 }
+
+/* ---------------- EDIT CONTACT MODAL ---------------- */
+var _editingId = null;
+function openEditContact(id){
+  var b = STATE.bookings.find(function(x){ return x.id===id; });
+  if (!b) return;
+  _editingId = id;
+  document.getElementById('ec-nome').value = b.nome || '';
+  document.getElementById('ec-cpf').value = b.cpf || '';
+  document.getElementById('ec-tel').value = b.telefone || '';
+  document.getElementById('ec-email').value = b.email || '';
+  document.getElementById('ec-data').value = b.data || '';
+  document.getElementById('ec-hora').value = b.horario ? b.horario.slice(0,5) : '';
+  document.getElementById('ec-obs').value = b.observacoes || '';
+  document.getElementById('overlay-edit-contact').classList.add('show');
+}
+document.getElementById('btn-ec-cancel').addEventListener('click', function(){
+  document.getElementById('overlay-edit-contact').classList.remove('show');
+});
+document.getElementById('overlay-edit-contact').addEventListener('click', function(e){
+  if (e.target.id==='overlay-edit-contact') document.getElementById('overlay-edit-contact').classList.remove('show');
+});
+document.getElementById('btn-ec-save').addEventListener('click', async function(){
+  if (!_editingId) return;
+  var patch = {
+    nome: document.getElementById('ec-nome').value.trim(),
+    cpf: document.getElementById('ec-cpf').value.trim(),
+    telefone: document.getElementById('ec-tel').value.trim(),
+    email: document.getElementById('ec-email').value.trim(),
+    data: document.getElementById('ec-data').value,
+    horario: document.getElementById('ec-hora').value,
+    observacoes: document.getElementById('ec-obs').value.trim()
+  };
+  var updated = await patchBooking(_editingId, patch);
+  if (updated){
+    updateLocal(updated);
+    document.getElementById('overlay-edit-contact').classList.remove('show');
+    toast('Agendamento atualizado.');
+    renderActiveTab();
+  }
+});
+document.getElementById('btn-ec-delete').addEventListener('click', async function(){
+  if (!_editingId) return;
+  var b = STATE.bookings.find(function(x){ return x.id===_editingId; });
+  var ok = await showConfirmModal(
+    'Excluir agendamento de '+escapeHTML(b ? b.nome : 'este lead')+'?',
+    'O registro será removido permanentemente do banco de dados.',
+    'Sim, excluir'
+  );
+  if (!ok) return;
+  var done = await deleteBooking(_editingId);
+  if (done){
+    document.getElementById('overlay-edit-contact').classList.remove('show');
+    toast('Agendamento excluído.');
+    renderActiveTab();
+  }
+});
+
+/* Delegação do clique no botão Editar da tabela de contatos */
+document.getElementById('tab-contacts').addEventListener('click', function(e){
+  var btn = e.target.closest('.edit-contact-btn');
+  if (btn) openEditContact(btn.dataset.id);
+});
 
 /* ---------------- HORÁRIOS DISPONÍVEIS (por modalidade) ---------------- */
 var DAY_LABELS = ['D','S','T','Q','Q','S','S'];
@@ -773,7 +908,7 @@ function renderHorarios(){
   el.querySelectorAll('.slot-del').forEach(function(btn){
     btn.addEventListener('click', async function(){
       var id = btn.dataset.id;
-      if (!confirm('Remover este horário definitivamente?')) return;
+    if (!await showConfirmModal('Remover este horário?', 'O horário será excluído definitivamente da lista.', 'Sim, remover')) return;
       await deleteTimeSlot(id);
       STATE.timeSlots = STATE.timeSlots.filter(function(s){ return s.id!==id; });
       renderHorarios();
