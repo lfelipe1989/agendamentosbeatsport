@@ -274,7 +274,7 @@
       </div>
       <div class="row2">
         <div class="field" data-field="m-data"><label>Data</label><input id="m-data" type="date"><p class="err">Escolha uma data.</p></div>
-        <div class="field" data-field="m-hora"><label>Horário</label><input id="m-hora" type="time" step="900"><p class="err">Escolha um horário.</p></div>
+        <div class="field" data-field="m-hora"><label>Horário</label><select id="m-hora"><option value="">Selecione a modalidade e data primeiro</option></select><p class="err">Escolha um horário.</p></div>
       </div>
       <div class="field">
         <label>Origem do lead</label>
@@ -959,12 +959,32 @@ function renderHorarios(){
 
 
 var selectedModManual = null;
-renderModPicker('mod-picker-manual', function(id){ selectedModManual = id; });
+function populateManualHoraSelect(){
+  var sel = document.getElementById('m-hora');
+  var dataVal = document.getElementById('m-data').value;
+  if (!selectedModManual || !dataVal){
+    sel.innerHTML = '<option value="">Selecione a modalidade e data primeiro</option>';
+    return;
+  }
+  var dow = new Date(dataVal+'T00:00:00').getDay();
+  var slots = STATE.timeSlots.filter(function(s){
+    return s.modalidade === selectedModManual && s.ativo && (s.dias_semana||[]).indexOf(dow) !== -1;
+  });
+  if (!slots.length){
+    sel.innerHTML = '<option value="">Nenhum horário disponível neste dia</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Selecione um horário</option>' +
+    slots.map(function(s){ return '<option value="'+s.horario+'">'+s.horario.slice(0,5)+'</option>'; }).join('');
+}
+renderModPicker('mod-picker-manual', function(id){ selectedModManual = id; populateManualHoraSelect(); });
 document.getElementById('m-data').min = todayISO();
+document.getElementById('m-data').addEventListener('change', populateManualHoraSelect);
 document.getElementById('m-cpf').addEventListener('input', function(e){ e.target.value = maskCPF(e.target.value); });
 document.getElementById('m-tel').addEventListener('input', function(e){ e.target.value = maskPhone(e.target.value); });
 document.getElementById('btn-manual').addEventListener('click', function(){
-  ['m-nome','m-cpf','m-email','m-tel','m-data','m-hora'].forEach(function(id){ document.getElementById(id).value=''; });
+  ['m-nome','m-cpf','m-email','m-tel','m-data'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('m-hora').innerHTML = '<option value="">Selecione a modalidade e data primeiro</option>';
   selectedModManual = null;
   document.querySelectorAll('#mod-picker-manual .mod-chip').forEach(function(b){ b.classList.remove('selected'); });
   document.querySelectorAll('#form-manual .field').forEach(function(f){ f.classList.remove('invalid'); });
