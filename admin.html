@@ -85,7 +85,7 @@
   .tabs{display:flex;gap:4px;max-width:1180px;margin:18px auto 0;overflow-x:auto;}
   .tab-btn{background:transparent;border:none;color:rgba(255,255,255,.7);padding:12px 16px;font-weight:600;font-size:.88rem;
     border-radius:10px 10px 0 0;white-space:nowrap;border-bottom:3px solid transparent;cursor:pointer;}
-  .tab-btn.active{color:#fff;background:#F5F6FA;border-bottom:3px solid var(--coral);}
+  .tab-btn.active{color:var(--ink);background:#F5F6FA;border-bottom:3px solid var(--coral);}
 
   .admin-body{max-width:1180px;margin:0 auto;padding:26px 22px 70px;}
   .tab-panel{display:none;}
@@ -671,7 +671,7 @@ function renderOverview(){
 }
 
 var toolbarState = { today:{modalidade:'all',status:'all',search:''}, week:{modalidade:'all',status:'all',search:''},
-  leads:{modalidade:'all',search:''}, contacts:{modalidade:'all',statusAula:'all',statusLead:'all',search:''} };
+  leads:{modalidade:'all',search:'',sort:'data-asc'}, contacts:{modalidade:'all',statusAula:'all',statusLead:'all',search:''} };
 function applyToolbarFilters(list, scope){
   var s = toolbarState[scope];
   return list.filter(function(b){
@@ -729,20 +729,38 @@ function renderWeek(){
   }).join('');
   attachTicketHandlers(listEl);
 }
+function sortLeads(list, sort){
+  var sorted = list.slice();
+  if (sort === 'data-asc')  sorted.sort(function(a,b){ return (a.data+a.horario).localeCompare(b.data+b.horario); });
+  if (sort === 'data-desc') sorted.sort(function(a,b){ return (b.data+b.horario).localeCompare(a.data+a.horario); });
+  if (sort === 'nome-asc')  sorted.sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt'); });
+  if (sort === 'nome-desc') sorted.sort(function(a,b){ return b.nome.localeCompare(a.nome,'pt'); });
+  return sorted;
+}
 function renderLeads(){
   var el = document.getElementById('tab-leads');
   var filtered = applyToolbarFilters(STATE.bookings, 'leads');
-  el.innerHTML = '<div class="toolbar" data-scope="leads"><select class="f-modalidade"><option value="all">Todas as modalidades</option>'+
-    MODALIDADES.map(function(m){return '<option value="'+m.id+'">'+m.id+'</option>';}).join('')+'</select>'+
-    '<input type="text" class="f-search" placeholder="Buscar por nome ou telefone..."></div><div class="kanban" id="leads-kanban"></div>';
+  el.innerHTML = '<div class="toolbar" data-scope="leads">'+
+    '<select class="f-modalidade"><option value="all">Todas as modalidades</option>'+MODALIDADES.map(function(m){return '<option value="'+m.id+'">'+m.id+'</option>';}).join('')+'</select>'+
+    '<select class="f-sort">'+
+      '<option value="data-asc">Data ↑ (mais antiga)</option>'+
+      '<option value="data-desc">Data ↓ (mais recente)</option>'+
+      '<option value="nome-asc">Nome A→Z</option>'+
+      '<option value="nome-desc">Nome Z→A</option>'+
+    '</select>'+
+    '<input type="text" class="f-search" placeholder="Buscar por nome ou telefone..."></div>'+
+    '<div class="kanban" id="leads-kanban"></div>';
+
   var modSel = el.querySelector('.f-modalidade'); modSel.value = toolbarState.leads.modalidade;
   modSel.addEventListener('change', function(){ toolbarState.leads.modalidade=modSel.value; renderActiveTab(); });
+  var sortSel = el.querySelector('.f-sort'); sortSel.value = toolbarState.leads.sort;
+  sortSel.addEventListener('change', function(){ toolbarState.leads.sort=sortSel.value; renderActiveTab(); });
   var search = el.querySelector('.f-search'); search.value = toolbarState.leads.search;
   var t; search.addEventListener('input', function(){ clearTimeout(t); t=setTimeout(function(){ toolbarState.leads.search=search.value; renderActiveTab(); },250); });
-  var kanban = document.getElementById('leads-kanban');
 
+  var kanban = document.getElementById('leads-kanban');
   kanban.innerHTML = STATUS_LEAD.map(function(stage){
-    var items = filtered.filter(function(b){return b.status_lead===stage;});
+    var items = sortLeads(filtered.filter(function(b){return b.status_lead===stage;}), toolbarState.leads.sort);
     return '<div class="kanban-col" data-stage="'+stage+'">'+
       '<h4>'+stage+'<span class="n">'+items.length+'</span></h4>'+
       items.map(function(b){
@@ -756,9 +774,7 @@ function renderLeads(){
     '</div>';
   }).join('');
 
-  /* ---- Drag-and-drop handlers ---- */
   var dragId = null;
-
   Array.prototype.forEach.call(kanban.querySelectorAll('.lead-card'), function(card){
     card.addEventListener('dragstart', function(e){
       dragId = card.dataset.id;
@@ -767,38 +783,23 @@ function renderLeads(){
     });
     card.addEventListener('dragend', function(){
       card.classList.remove('dragging');
-      Array.prototype.forEach.call(kanban.querySelectorAll('.kanban-col'), function(col){
-        col.classList.remove('drag-over');
-      });
+      Array.prototype.forEach.call(kanban.querySelectorAll('.kanban-col'), function(col){ col.classList.remove('drag-over'); });
       dragId = null;
     });
   });
-
   Array.prototype.forEach.call(kanban.querySelectorAll('.kanban-col'), function(col){
-    col.addEventListener('dragover', function(e){
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      col.classList.add('drag-over');
-    });
-    col.addEventListener('dragleave', function(e){
-      if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over');
-    });
+    col.addEventListener('dragover', function(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; col.classList.add('drag-over'); });
+    col.addEventListener('dragleave', function(e){ if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over'); });
     col.addEventListener('drop', async function(e){
-      e.preventDefault();
-      col.classList.remove('drag-over');
+      e.preventDefault(); col.classList.remove('drag-over');
       if (!dragId) return;
       var newStage = col.dataset.stage;
       var b = STATE.bookings.find(function(x){ return x.id===dragId; });
       if (!b || b.status_lead === newStage) return;
       var updated = await patchBooking(dragId, {status_lead: newStage});
-      if (updated){
-        updateLocal(updated);
-        toast(escapeHTML(b.nome)+' movido para '+newStage+'.');
-        renderLeads();
-      }
+      if (updated){ updateLocal(updated); toast(escapeHTML(b.nome)+' movido para '+newStage+'.'); renderLeads(); }
     });
   });
-
   attachTicketHandlers(kanban);
 }
 function renderContacts(){
