@@ -143,10 +143,13 @@
 
   .kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-items:start;}
   @media (max-width:1020px){.kanban{grid-template-columns:1fr;}}
-  .kanban-col{background:#EAECF4;border-radius:14px;padding:12px;min-height:80px;border:1px solid #D8DAE8;}
+  .kanban-col{background:#EAECF4;border-radius:14px;padding:12px;min-height:120px;border:1px solid #D8DAE8;transition:background .15s, border-color .15s;}
+  .kanban-col.drag-over{background:#DDE0F5;border-color:var(--ocean-light);}
   .kanban-col h4{font-size:.82rem;font-weight:700;display:flex;justify-content:space-between;color:var(--ink);margin-bottom:10px;padding:0 4px;}
   .kanban-col h4 .n{background:#fff;color:var(--ink);border-radius:99px;padding:1px 8px;font-size:.72rem;border:1px solid #D8DAE8;}
-  .lead-card{background:#fff;border-radius:11px;padding:11px 12px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.07);border:1px solid #E8EAF0;border-left:3px solid var(--mod-color);}
+  .lead-card{background:#fff;border-radius:11px;padding:11px 12px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.07);border:1px solid #E8EAF0;border-left:3px solid var(--mod-color);cursor:grab;}
+  .lead-card:active{cursor:grabbing;}
+  .lead-card.dragging{opacity:.45;transform:scale(.97);}
   .lead-card .name{font-weight:700;font-size:.86rem;color:var(--ink);}
   .lead-card .sub{font-size:.72rem;color:var(--ink-soft);margin-top:2px;}
   .lead-card select{width:100%;margin-top:8px;padding:6px 8px;border:1.5px solid #D0D4DC;border-radius:8px;font-size:.74rem;color:var(--ink);}
@@ -737,15 +740,65 @@ function renderLeads(){
   var search = el.querySelector('.f-search'); search.value = toolbarState.leads.search;
   var t; search.addEventListener('input', function(){ clearTimeout(t); t=setTimeout(function(){ toolbarState.leads.search=search.value; renderActiveTab(); },250); });
   var kanban = document.getElementById('leads-kanban');
+
   kanban.innerHTML = STATUS_LEAD.map(function(stage){
     var items = filtered.filter(function(b){return b.status_lead===stage;});
-    return '<div class="kanban-col"><h4>'+stage+'<span class="n">'+items.length+'</span></h4>'+
+    return '<div class="kanban-col" data-stage="'+stage+'">'+
+      '<h4>'+stage+'<span class="n">'+items.length+'</span></h4>'+
       items.map(function(b){
-        return '<div class="lead-card" style="--mod-color:'+modColor(b.modalidade)+'"><div class="name">'+escapeHTML(b.nome)+'</div>'+
+        return '<div class="lead-card" draggable="true" data-id="'+b.id+'" style="--mod-color:'+modColor(b.modalidade)+'">'+
+          '<div class="name">'+escapeHTML(b.nome)+'</div>'+
           '<div class="sub">'+b.modalidade+' · '+formatDateBR(b.data)+' '+(b.horario?b.horario.slice(0,5):'')+'</div>'+
-          '<div class="sub">'+escapeHTML(b.telefone)+'</div><select class="status-lead-select" data-id="'+b.id+'">'+selectOptions(STATUS_LEAD,b.status_lead)+'</select></div>';
-      }).join('')+'</div>';
+          '<div class="sub">'+escapeHTML(b.telefone)+'</div>'+
+          '<select class="status-lead-select" data-id="'+b.id+'">'+selectOptions(STATUS_LEAD,b.status_lead)+'</select>'+
+        '</div>';
+      }).join('')+
+    '</div>';
   }).join('');
+
+  /* ---- Drag-and-drop handlers ---- */
+  var dragId = null;
+
+  Array.prototype.forEach.call(kanban.querySelectorAll('.lead-card'), function(card){
+    card.addEventListener('dragstart', function(e){
+      dragId = card.dataset.id;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', function(){
+      card.classList.remove('dragging');
+      Array.prototype.forEach.call(kanban.querySelectorAll('.kanban-col'), function(col){
+        col.classList.remove('drag-over');
+      });
+      dragId = null;
+    });
+  });
+
+  Array.prototype.forEach.call(kanban.querySelectorAll('.kanban-col'), function(col){
+    col.addEventListener('dragover', function(e){
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      col.classList.add('drag-over');
+    });
+    col.addEventListener('dragleave', function(e){
+      if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over');
+    });
+    col.addEventListener('drop', async function(e){
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      if (!dragId) return;
+      var newStage = col.dataset.stage;
+      var b = STATE.bookings.find(function(x){ return x.id===dragId; });
+      if (!b || b.status_lead === newStage) return;
+      var updated = await patchBooking(dragId, {status_lead: newStage});
+      if (updated){
+        updateLocal(updated);
+        toast(escapeHTML(b.nome)+' movido para '+newStage+'.');
+        renderLeads();
+      }
+    });
+  });
+
   attachTicketHandlers(kanban);
 }
 function renderContacts(){
