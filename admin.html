@@ -150,7 +150,8 @@
   .lead-card{background:#fff;border-radius:11px;padding:11px 12px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.07);border:1px solid #E8EAF0;border-left:3px solid var(--mod-color);cursor:grab;}
   .lead-card:active{cursor:grabbing;}
   .lead-card.dragging{opacity:.45;transform:scale(.97);}
-  .lead-card .name{font-weight:700;font-size:.86rem;color:var(--ink);}
+  .lead-card .name{font-weight:700;font-size:.86rem;color:var(--ink);cursor:pointer;display:inline-block;}
+  .lead-card .name:hover{text-decoration:underline;color:var(--ocean-light);}
   .lead-card .sub{font-size:.72rem;color:var(--ink-soft);margin-top:2px;}
   .lead-card select{width:100%;margin-top:8px;padding:6px 8px;border:1.5px solid #D0D4DC;border-radius:8px;font-size:.74rem;color:var(--ink);}
 
@@ -289,6 +290,67 @@
       <div class="modal-close-row">
         <button type="button" class="btn btn-ghost" id="btn-manual-cancel">Cancelar</button>
         <button type="button" id="btn-manual-save" class="btn btn-primary">Salvar agendamento</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal detalhe do lead (abre ao clicar no nome no kanban) -->
+<div class="overlay" id="overlay-lead-detail" style="z-index:250;">
+  <div class="modal-box" style="max-width:580px;">
+    <div id="lead-detail-header" style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #E8EAF0;">
+      <div id="ld-mod-dot" style="width:12px;height:12px;border-radius:50%;flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div id="ld-mod-label" style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);margin-bottom:3px;"></div>
+        <a id="ld-wa-link" href="#" target="_blank" rel="noopener" style="font-size:1rem;font-weight:700;color:#1A7A3F;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#1A7A3F" style="flex-shrink:0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.854L0 24l6.335-1.521A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.006-1.371l-.36-.214-3.733.897.93-3.62-.235-.373A9.818 9.818 0 012.182 12C2.182 6.573 6.573 2.182 12 2.182S21.818 6.573 21.818 12 17.427 21.818 12 21.818z"/></svg>
+          <span id="ld-telefone-display"></span>
+        </a>
+        <div id="ld-email-display" style="font-size:.82rem;color:var(--ink-soft);margin-top:2px;"></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <span id="ld-badge-aula" class="badge" style="font-size:.72rem;"></span>
+        <span id="ld-badge-lead" class="badge" style="font-size:.72rem;"></span>
+      </div>
+    </div>
+
+    <div class="row2" style="margin-bottom:14px;">
+      <div class="field" style="margin-bottom:0;"><label>Nome completo</label><input id="ld-nome" type="text"></div>
+      <div class="field" style="margin-bottom:0;"><label>CPF</label><input id="ld-cpf" type="text" maxlength="14"></div>
+    </div>
+    <div class="row2" style="margin-bottom:14px;">
+      <div class="field" style="margin-bottom:0;"><label>Telefone / WhatsApp</label><input id="ld-tel" type="text" inputmode="numeric" maxlength="15"></div>
+      <div class="field" style="margin-bottom:0;"><label>E-mail</label><input id="ld-email" type="email"></div>
+    </div>
+    <div class="row2" style="margin-bottom:14px;">
+      <div class="field" style="margin-bottom:0;"><label>Data da aula</label><input id="ld-data" type="date"></div>
+      <div class="field" style="margin-bottom:0;"><label>Horário</label><input id="ld-hora" type="time" step="900"></div>
+    </div>
+    <div class="row2" style="margin-bottom:14px;">
+      <div class="field" style="margin-bottom:0;"><label>Status da aula</label>
+        <select id="ld-status-aula"></select>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Status do lead</label>
+        <select id="ld-status-lead"></select>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label>Motivo (cancelamento, remarcação…)</label>
+      <input id="ld-motivo" type="text" placeholder="Opcional">
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label>Notas internas</label>
+      <textarea id="ld-obs" rows="3" style="width:100%;padding:10px;border:1.5px solid #D0D4DC;border-radius:10px;font-size:.88rem;resize:vertical;font-family:var(--font-body);color:var(--ink);"></textarea>
+    </div>
+    <div class="field" style="margin-bottom:20px;">
+      <label>Retornar contato em</label>
+      <input id="ld-retorno" type="date" style="max-width:180px;">
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-danger btn-sm" id="btn-ld-delete">Excluir agendamento</button>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="btn btn-ghost" id="btn-ld-cancel">Fechar</button>
+        <button type="button" class="btn btn-primary" id="btn-ld-save">Salvar alterações</button>
       </div>
     </div>
   </div>
@@ -909,6 +971,115 @@ document.getElementById('btn-ec-delete').addEventListener('click', async functio
 document.getElementById('tab-contacts').addEventListener('click', function(e){
   var btn = e.target.closest('.edit-contact-btn');
   if (btn) openEditContact(btn.dataset.id);
+});
+
+/* ---------------- LEAD DETAIL MODAL (kanban) ---------------- */
+var _ldId = null;
+function openLeadDetail(id){
+  var b = STATE.bookings.find(function(x){ return x.id===id; });
+  if (!b) return;
+  _ldId = id;
+  var color = modColor(b.modalidade);
+
+  // Header
+  document.getElementById('ld-mod-dot').style.background = color;
+  document.getElementById('ld-mod-label').textContent = b.modalidade;
+  document.getElementById('ld-mod-label').style.color = color;
+  document.getElementById('ld-telefone-display').textContent = b.telefone || '—';
+  document.getElementById('ld-wa-link').href = waLink(b.telefone);
+  document.getElementById('ld-email-display').textContent = b.email || '';
+  var badgeAula = document.getElementById('ld-badge-aula');
+  badgeAula.textContent = b.status_aula;
+  badgeAula.style.background = STATUS_AULA_COLOR[b.status_aula] || '#888';
+  var badgeLead = document.getElementById('ld-badge-lead');
+  badgeLead.textContent = b.status_lead;
+  badgeLead.style.background = STATUS_LEAD_COLOR[b.status_lead] || '#888';
+
+  // Fields
+  document.getElementById('ld-nome').value = b.nome || '';
+  document.getElementById('ld-cpf').value = b.cpf || '';
+  document.getElementById('ld-tel').value = b.telefone || '';
+  document.getElementById('ld-email').value = b.email || '';
+  document.getElementById('ld-data').value = b.data || '';
+  document.getElementById('ld-hora').value = b.horario ? b.horario.slice(0,5) : '';
+  document.getElementById('ld-status-aula').innerHTML = selectOptions(STATUS_AULA, b.status_aula);
+  document.getElementById('ld-status-lead').innerHTML = selectOptions(STATUS_LEAD, b.status_lead);
+  document.getElementById('ld-motivo').value = b.motivo || '';
+  document.getElementById('ld-obs').value = b.observacoes || '';
+  document.getElementById('ld-retorno').value = b.retorno_contato ? b.retorno_contato.slice(0,10) : '';
+
+  document.getElementById('overlay-lead-detail').classList.add('show');
+}
+// Live-update header when tel changes
+document.getElementById('ld-tel').addEventListener('input', function(){
+  document.getElementById('ld-telefone-display').textContent = this.value || '—';
+  document.getElementById('ld-wa-link').href = waLink(this.value);
+});
+// Live-update badges when status changes
+document.getElementById('ld-status-aula').addEventListener('change', function(){
+  var badge = document.getElementById('ld-badge-aula');
+  badge.textContent = this.value;
+  badge.style.background = STATUS_AULA_COLOR[this.value] || '#888';
+});
+document.getElementById('ld-status-lead').addEventListener('change', function(){
+  var badge = document.getElementById('ld-badge-lead');
+  badge.textContent = this.value;
+  badge.style.background = STATUS_LEAD_COLOR[this.value] || '#888';
+});
+
+document.getElementById('btn-ld-cancel').addEventListener('click', function(){
+  document.getElementById('overlay-lead-detail').classList.remove('show');
+});
+document.getElementById('overlay-lead-detail').addEventListener('click', function(e){
+  if (e.target.id==='overlay-lead-detail') document.getElementById('overlay-lead-detail').classList.remove('show');
+});
+document.getElementById('btn-ld-save').addEventListener('click', async function(){
+  if (!_ldId) return;
+  var patch = {
+    nome: document.getElementById('ld-nome').value.trim(),
+    cpf: document.getElementById('ld-cpf').value.trim(),
+    telefone: document.getElementById('ld-tel').value.trim(),
+    email: document.getElementById('ld-email').value.trim(),
+    data: document.getElementById('ld-data').value,
+    horario: document.getElementById('ld-hora').value,
+    status_aula: document.getElementById('ld-status-aula').value,
+    status_lead: document.getElementById('ld-status-lead').value,
+    motivo: document.getElementById('ld-motivo').value.trim(),
+    observacoes: document.getElementById('ld-obs').value.trim(),
+    retorno_contato: document.getElementById('ld-retorno').value || null
+  };
+  var updated = await patchBooking(_ldId, patch);
+  if (updated){
+    updateLocal(updated);
+    document.getElementById('overlay-lead-detail').classList.remove('show');
+    toast('Lead atualizado.');
+    renderActiveTab();
+  }
+});
+document.getElementById('btn-ld-delete').addEventListener('click', async function(){
+  if (!_ldId) return;
+  var b = STATE.bookings.find(function(x){ return x.id===_ldId; });
+  var ok = await showConfirmModal(
+    'Excluir agendamento de '+(b ? escapeHTML(b.nome) : 'este lead')+'?',
+    'O registro será removido permanentemente do banco de dados.',
+    'Sim, excluir'
+  );
+  if (!ok) return;
+  var done = await deleteBooking(_ldId);
+  if (done){
+    document.getElementById('overlay-lead-detail').classList.remove('show');
+    toast('Agendamento excluído.');
+    renderActiveTab();
+  }
+});
+
+/* Delegação do clique no nome do card do kanban */
+document.getElementById('tab-leads').addEventListener('click', function(e){
+  var nameEl = e.target.closest('.lead-card .name');
+  if (nameEl){
+    var card = nameEl.closest('.lead-card');
+    if (card) openLeadDetail(card.dataset.id);
+  }
 });
 
 /* ---------------- HORÁRIOS DISPONÍVEIS (por modalidade) ---------------- */
