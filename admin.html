@@ -1031,7 +1031,6 @@ function populateManualHoraSelect(){
     slots.map(function(s){ return '<option value="'+s.horario+'">'+s.horario.slice(0,5)+'</option>'; }).join('');
 }
 renderModPicker('mod-picker-manual', function(id){ selectedModManual = id; populateManualHoraSelect(); });
-document.getElementById('m-data').min = todayISO();
 document.getElementById('m-data').addEventListener('change', populateManualHoraSelect);
 document.getElementById('m-cpf').addEventListener('input', function(e){ e.target.value = maskCPF(e.target.value); });
 document.getElementById('m-tel').addEventListener('input', function(e){ e.target.value = maskPhone(e.target.value); });
@@ -1041,7 +1040,6 @@ document.getElementById('btn-manual').addEventListener('click', function(){
   selectedModManual = null;
   document.querySelectorAll('#mod-picker-manual .mod-chip').forEach(function(b){ b.classList.remove('selected'); });
   document.querySelectorAll('#form-manual .field').forEach(function(f){ f.classList.remove('invalid'); });
-  document.getElementById('m-data').min = todayISO();
   document.getElementById('overlay-manual').classList.add('show');
 });
 document.getElementById('btn-manual-cancel').addEventListener('click', function(){ document.getElementById('overlay-manual').classList.remove('show'); });
