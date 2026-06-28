@@ -244,8 +244,7 @@
     </div>
     <div class="tabs">
       <button class="tab-btn active" data-tab="overview">Visão geral</button>
-      <button class="tab-btn" data-tab="today">Aulas do dia</button>
-      <button class="tab-btn" data-tab="week">Aulas da semana</button>
+      <button class="tab-btn" data-tab="aulas">Aulas agendadas</button>
       <button class="tab-btn" data-tab="leads">Status dos leads</button>
       <button class="tab-btn" data-tab="contacts">Contato</button>
       <button class="tab-btn" data-tab="horarios">Horários</button>
@@ -254,8 +253,7 @@
   <div class="admin-body">
     <div class="last-updated" id="last-updated">Carregando dados...</div>
     <div class="tab-panel active" id="tab-overview"></div>
-    <div class="tab-panel" id="tab-today"></div>
-    <div class="tab-panel" id="tab-week"></div>
+    <div class="tab-panel" id="tab-aulas"></div>
     <div class="tab-panel" id="tab-leads"></div>
     <div class="tab-panel" id="tab-contacts"></div>
     <div class="tab-panel" id="tab-horarios"></div>
@@ -625,8 +623,7 @@ async function refreshBookings(){
 }
 function renderActiveTab(){
   if (STATE.activeTab==='overview') renderOverview();
-  else if (STATE.activeTab==='today') renderToday();
-  else if (STATE.activeTab==='week') renderWeek();
+  else if (STATE.activeTab==='aulas') renderAulas();
   else if (STATE.activeTab==='leads') renderLeads();
   else if (STATE.activeTab==='contacts') renderContacts();
   else if (STATE.activeTab==='horarios') renderHorarios();
@@ -732,7 +729,7 @@ function renderOverview(){
   });
 }
 
-var toolbarState = { today:{modalidade:'all',status:'all',search:''}, week:{modalidade:'all',status:'all',search:''},
+var toolbarState = { aulas:{modalidade:'all',status:'all',search:'',periodo:'hoje'},
   leads:{modalidade:'all',search:'',sort:'data-asc'}, contacts:{modalidade:'all',statusAula:'all',statusLead:'all',search:''} };
 function applyToolbarFilters(list, scope){
   var s = toolbarState[scope];
@@ -766,29 +763,104 @@ function attachToolbarHandlers(scope){
   if (search){ var timer; search.addEventListener('input', function(){ clearTimeout(timer); timer=setTimeout(function(){ toolbarState[scope].search=search.value; renderActiveTab(); },250); }); }
 }
 
-function renderToday(){
-  var el = document.getElementById('tab-today'); var today = todayISO();
-  var list = applyToolbarFilters(STATE.bookings.filter(function(b){return b.data===today;}),'today');
-  el.innerHTML = toolbarHTML('today', true) + '<div id="today-list"></div>';
-  attachToolbarHandlers('today');
-  var listEl = document.getElementById('today-list');
-  listEl.innerHTML = list.length ? list.map(function(b){return ticketCardHTML(b,{showDate:false});}).join('') :
-    '<div class="empty-state">Nenhuma aula agendada para hoje. Compartilhe o link de agendamento para começar a receber leads.</div>';
-  attachTicketHandlers(listEl);
-}
-function renderWeek(){
-  var el = document.getElementById('tab-week'); var monday = getMonday(new Date());
-  var days=[]; for (var i=0;i<7;i++) days.push(isoFromDate(addDays(monday,i)));
-  var filtered = applyToolbarFilters(STATE.bookings.filter(function(b){return days.indexOf(b.data)!==-1;}),'week');
-  el.innerHTML = toolbarHTML('week', true) + '<div id="week-list"></div>';
-  attachToolbarHandlers('week');
-  var listEl = document.getElementById('week-list');
-  listEl.innerHTML = days.map(function(day){
-    var dayBookings = filtered.filter(function(b){return b.data===day;});
-    var block = '<div class="day-group"><h3>'+weekdayName(day)+' <span class="d">'+formatDateBR(day)+'</span></h3>';
-    block += dayBookings.length ? dayBookings.map(function(b){return ticketCardHTML(b,{showDate:false});}).join('') : '<div class="empty-state">Nenhuma aula neste dia.</div>';
-    return block + '</div>';
-  }).join('');
+function renderAulas(){
+  var el = document.getElementById('tab-aulas');
+  var periodo = toolbarState.aulas.periodo;
+
+  // Build the period selector row
+  var periodoHtml =
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">'+
+      '<button type="button" class="btn btn-sm periodo-btn'+(periodo==='hoje'?' btn-dark':' btn-ghost')+'" data-periodo="hoje">Hoje</button>'+
+      '<button type="button" class="btn btn-sm periodo-btn'+(periodo==='semana'?' btn-dark':' btn-ghost')+'" data-periodo="semana">Esta semana</button>'+
+      '<button type="button" class="btn btn-sm periodo-btn'+(periodo==='personalizado'?' btn-dark':' btn-ghost')+'" data-periodo="personalizado">Personalizado</button>'+
+      (periodo==='personalizado'?
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+          '<input type="date" id="custom-de" value="'+(toolbarState.aulas.customDe||'')+'" style="padding:7px 10px;border:1.5px solid #D0D4DC;border-radius:9px;font-size:.84rem;">'+
+          '<span style="color:var(--ink-soft);font-size:.82rem;">até</span>'+
+          '<input type="date" id="custom-ate" value="'+(toolbarState.aulas.customAte||'')+'" style="padding:7px 10px;border:1.5px solid #D0D4DC;border-radius:9px;font-size:.84rem;">'+
+        '</div>' : '')+
+    '</div>';
+
+  var toolbar =
+    '<div class="toolbar" data-scope="aulas">'+
+      '<select class="f-modalidade"><option value="all">Todas as modalidades</option>'+MODALIDADES.map(function(m){return '<option value="'+m.id+'">'+m.id+'</option>';}).join('')+'</select>'+
+      '<select class="f-status"><option value="all">Todos os status da aula</option>'+STATUS_AULA.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('')+'</select>'+
+      '<input type="text" class="f-search" placeholder="Buscar por nome ou telefone...">'+
+    '</div>';
+
+  el.innerHTML = periodoHtml + toolbar + '<div id="aulas-list"></div>';
+
+  // Period button handlers
+  Array.prototype.forEach.call(el.querySelectorAll('.periodo-btn'), function(btn){
+    btn.addEventListener('click', function(){
+      toolbarState.aulas.periodo = btn.dataset.periodo;
+      if (btn.dataset.periodo !== 'personalizado'){
+        toolbarState.aulas.customDe = '';
+        toolbarState.aulas.customAte = '';
+      }
+      renderAulas();
+    });
+  });
+  // Custom date range handlers
+  var customDe = el.querySelector('#custom-de'), customAte = el.querySelector('#custom-ate');
+  if (customDe) customDe.addEventListener('change', function(){ toolbarState.aulas.customDe = this.value; renderAulas(); });
+  if (customAte) customAte.addEventListener('change', function(){ toolbarState.aulas.customAte = this.value; renderAulas(); });
+
+  // Toolbar filter handlers
+  attachToolbarHandlers('aulas');
+
+  // Determine which dates to show
+  var today = todayISO();
+  var monday = getMonday(new Date());
+  var sunday = addDays(monday, 6);
+  var ws = isoFromDate(monday), we = isoFromDate(sunday);
+
+  var bookingsInPeriod;
+  if (periodo === 'hoje'){
+    bookingsInPeriod = STATE.bookings.filter(function(b){ return b.data === today; });
+  } else if (periodo === 'semana'){
+    bookingsInPeriod = STATE.bookings.filter(function(b){ return b.data >= ws && b.data <= we; });
+  } else {
+    var de = toolbarState.aulas.customDe || '', ate = toolbarState.aulas.customAte || '';
+    if (de && ate){
+      bookingsInPeriod = STATE.bookings.filter(function(b){ return b.data >= de && b.data <= ate; });
+    } else if (de){
+      bookingsInPeriod = STATE.bookings.filter(function(b){ return b.data >= de; });
+    } else {
+      bookingsInPeriod = STATE.bookings.slice();
+    }
+  }
+
+  var filtered = applyToolbarFilters(bookingsInPeriod, 'aulas');
+  var listEl = document.getElementById('aulas-list');
+
+  if (periodo === 'hoje'){
+    listEl.innerHTML = filtered.length ?
+      filtered.map(function(b){ return ticketCardHTML(b,{showDate:false}); }).join('') :
+      '<div class="empty-state">Nenhuma aula agendada para hoje.</div>';
+  } else {
+    // Group by day
+    var days = [];
+    var seen = {};
+    filtered.forEach(function(b){ if (!seen[b.data]){ seen[b.data]=true; days.push(b.data); } });
+    if (periodo === 'semana'){
+      days = []; for (var i=0;i<7;i++) days.push(isoFromDate(addDays(monday,i)));
+    } else {
+      days.sort();
+    }
+    if (!days.length){
+      listEl.innerHTML = '<div class="empty-state">Nenhuma aula encontrada no período selecionado.</div>';
+    } else {
+      listEl.innerHTML = days.map(function(day){
+        var dayBookings = filtered.filter(function(b){ return b.data===day; });
+        var block = '<div class="day-group"><h3>'+weekdayName(day)+' <span class="d">'+formatDateBR(day)+'</span></h3>';
+        block += dayBookings.length ?
+          dayBookings.map(function(b){ return ticketCardHTML(b,{showDate:false}); }).join('') :
+          '<div class="empty-state">Nenhuma aula neste dia.</div>';
+        return block + '</div>';
+      }).join('');
+    }
+  }
   attachTicketHandlers(listEl);
 }
 function sortLeads(list, sort){
