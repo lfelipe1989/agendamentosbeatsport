@@ -810,7 +810,7 @@ function renderOverview(){
 }
 
 var toolbarState = { aulas:{modalidade:'all',status:'all',search:'',periodo:'hoje'},
-  leads:{modalidade:'all',search:'',sort:'data-asc'}, contacts:{modalidade:'all',statusAula:'all',statusLead:'all',search:''} };
+  leads:{modalidade:'all',search:'',sort:'data-asc'}, contacts:{modalidade:'all',statusAula:'all',statusLead:'all',search:'',retorno:'all'} };
 function applyToolbarFilters(list, scope){
   var s = toolbarState[scope];
   return list.filter(function(b){
@@ -818,6 +818,16 @@ function applyToolbarFilters(list, scope){
     if (s.status && s.status!=='all' && b.status_aula!==s.status) return false;
     if (s.statusAula && s.statusAula!=='all' && b.status_aula!==s.statusAula) return false;
     if (s.statusLead && s.statusLead!=='all' && b.status_lead!==s.statusLead) return false;
+    if (s.retorno && s.retorno !== 'all'){
+      var hoje = todayISO();
+      var monday = isoFromDate(getMonday(new Date()));
+      var sunday = isoFromDate(addDays(getMonday(new Date()), 6));
+      if (s.retorno === 'atrasado' && !(b.retorno_contato && b.retorno_contato.slice(0,10) < hoje)) return false;
+      if (s.retorno === 'hoje' && !(b.retorno_contato && b.retorno_contato.slice(0,10) === hoje)) return false;
+      if (s.retorno === 'semana' && !(b.retorno_contato && b.retorno_contato.slice(0,10) >= monday && b.retorno_contato.slice(0,10) <= sunday)) return false;
+      if (s.retorno === 'com-data' && !b.retorno_contato) return false;
+      if (s.retorno === 'sem-data' && b.retorno_contato) return false;
+    }
     if (s.search){
       var q=s.search.toLowerCase(); var hay=(b.nome+' '+b.telefone+' '+b.cpf+' '+b.email).toLowerCase();
       if (hay.indexOf(q)===-1) return false;
@@ -1024,13 +1034,22 @@ function renderContacts(){
   el.innerHTML = '<div class="toolbar" data-scope="contacts"><select class="f-modalidade"><option value="all">Todas as modalidades</option>'+
     MODALIDADES.map(function(m){return '<option value="'+m.id+'">'+m.id+'</option>';}).join('')+'</select>'+
     '<select class="f-statusLead"><option value="all">Todos os status de lead</option>'+STATUS_LEAD.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('')+'</select>'+
+    '<select class="f-retorno">'+
+      '<option value="all">Qualquer retorno</option>'+
+      '<option value="atrasado">⚠️ Atrasado</option>'+
+      '<option value="hoje">📅 Retornar hoje</option>'+
+      '<option value="semana">Esta semana</option>'+
+      '<option value="com-data">Com data marcada</option>'+
+      '<option value="sem-data">Sem data marcada</option>'+
+    '</select>'+
     '<input type="text" class="f-search" placeholder="Buscar por nome, telefone, e-mail ou CPF...">'+
     '<button class="btn btn-ghost btn-sm" id="btn-export-csv">Exportar CSV</button><span class="count">'+filtered.length+' contato(s)</span></div>'+
     '<div class="contacts-table-wrap"><table class="contacts"><thead><tr><th>Nome</th><th>Contato</th><th>CPF</th><th>Modalidade</th><th>Aula</th><th>Status aula</th><th>Status lead</th><th>Retornar contato em</th><th></th></tr></thead><tbody id="contacts-tbody"></tbody></table></div>';
-  var modSel=el.querySelector('.f-modalidade'), leadSel=el.querySelector('.f-statusLead'), search=el.querySelector('.f-search');
-  modSel.value=toolbarState.contacts.modalidade; leadSel.value=toolbarState.contacts.statusLead; search.value=toolbarState.contacts.search;
+  var modSel=el.querySelector('.f-modalidade'), leadSel=el.querySelector('.f-statusLead'), search=el.querySelector('.f-search'), retornoSel=el.querySelector('.f-retorno');
+  modSel.value=toolbarState.contacts.modalidade; leadSel.value=toolbarState.contacts.statusLead; search.value=toolbarState.contacts.search; retornoSel.value=toolbarState.contacts.retorno;
   modSel.addEventListener('change', function(){ toolbarState.contacts.modalidade=modSel.value; renderActiveTab(); });
   leadSel.addEventListener('change', function(){ toolbarState.contacts.statusLead=leadSel.value; renderActiveTab(); });
+  retornoSel.addEventListener('change', function(){ toolbarState.contacts.retorno=retornoSel.value; renderActiveTab(); });
   var t; search.addEventListener('input', function(){ clearTimeout(t); t=setTimeout(function(){ toolbarState.contacts.search=search.value; renderActiveTab(); },250); });
   var tbody = document.getElementById('contacts-tbody');
   tbody.innerHTML = filtered.length ? filtered.map(function(b){
