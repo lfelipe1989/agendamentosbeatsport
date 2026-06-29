@@ -322,7 +322,7 @@
     </div>
     <div class="row2" style="margin-bottom:14px;">
       <div class="field" style="margin-bottom:0;"><label>Data da aula</label><input id="ld-data" type="date"></div>
-      <div class="field" style="margin-bottom:0;"><label>Horário</label><input id="ld-hora" type="time" step="900"></div>
+      <div class="field" style="margin-bottom:0;"><label>Horário</label><select id="ld-hora"><option value="">Escolha a data primeiro</option></select></div>
     </div>
     <div class="row2" style="margin-bottom:14px;">
       <div class="field" style="margin-bottom:0;"><label>Status da aula</label>
@@ -1129,10 +1129,37 @@ document.getElementById('tab-contacts').addEventListener('click', function(e){
 
 /* ---------------- LEAD DETAIL MODAL (kanban) ---------------- */
 var _ldId = null;
+var _ldModalidade = null;
+function populateLdHoraSelect(modalidade, dataVal, currentHorario){
+  var sel = document.getElementById('ld-hora');
+  if (!modalidade || !dataVal){
+    sel.innerHTML = '<option value="">Escolha a data primeiro</option>';
+    return;
+  }
+  var dow = new Date(dataVal+'T00:00:00').getDay();
+  var slots = STATE.timeSlots.filter(function(s){
+    return s.modalidade === modalidade && s.ativo && (s.dias_semana||[]).indexOf(dow) !== -1;
+  });
+  // Always include the booking's current horario even if it was deactivated
+  var current5 = currentHorario ? currentHorario.slice(0,5) : '';
+  var currentInSlots = slots.some(function(s){ return s.horario.slice(0,5) === current5; });
+  if (!slots.length && !current5){
+    sel.innerHTML = '<option value="">Nenhum horário disponível neste dia</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Selecione um horário</option>' +
+    slots.map(function(s){
+      var v = s.horario.slice(0,5);
+      return '<option value="'+v+'"'+(v===current5?' selected':'')+'>'+v+'</option>';
+    }).join('') +
+    // If current horario is not in active slots, add it as a disabled-looking option so existing data is preserved
+    (!currentInSlots && current5 ? '<option value="'+current5+'" selected>'+current5+' (horário atual)</option>' : '');
+}
 function openLeadDetail(id){
   var b = STATE.bookings.find(function(x){ return x.id===id; });
   if (!b) return;
   _ldId = id;
+  _ldModalidade = b.modalidade;
   var color = modColor(b.modalidade);
 
   // Header
@@ -1155,7 +1182,7 @@ function openLeadDetail(id){
   document.getElementById('ld-tel').value = b.telefone || '';
   document.getElementById('ld-email').value = b.email || '';
   document.getElementById('ld-data').value = b.data || '';
-  document.getElementById('ld-hora').value = b.horario ? b.horario.slice(0,5) : '';
+  populateLdHoraSelect(b.modalidade, b.data, b.horario);
   document.getElementById('ld-status-aula').innerHTML = selectOptions(STATUS_AULA, b.status_aula);
   document.getElementById('ld-status-lead').innerHTML = selectOptions(STATUS_LEAD, b.status_lead);
   document.getElementById('ld-responsavel').innerHTML = equipeOptions(b.responsavel || '');
@@ -1166,6 +1193,10 @@ function openLeadDetail(id){
 
   document.getElementById('overlay-lead-detail').classList.add('show');
 }
+// Live-update hora select when date changes in lead detail modal
+document.getElementById('ld-data').addEventListener('change', function(){
+  populateLdHoraSelect(_ldModalidade, this.value, '');
+});
 // Live-update header when tel changes
 document.getElementById('ld-tel').addEventListener('input', function(){
   document.getElementById('ld-telefone-display').textContent = this.value || '—';
