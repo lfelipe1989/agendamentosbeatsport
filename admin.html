@@ -1031,6 +1031,27 @@ function renderLeads(){
 function renderContacts(){
   var el = document.getElementById('tab-contacts');
   var filtered = applyToolbarFilters(STATE.bookings, 'contacts');
+
+  // Default sort: prioridade de retorno de contato
+  // 0=atrasado, 1=hoje, 2=esta semana, 3=data futura, 4=sem data
+  function retornoPriority(b){
+    var r = b.retorno_contato ? b.retorno_contato.slice(0,10) : null;
+    if (!r) return 4;
+    var hoje = todayISO();
+    var sunday = isoFromDate(addDays(getMonday(new Date()), 6));
+    if (r < hoje) return 0;
+    if (r === hoje) return 1;
+    if (r <= sunday) return 2;
+    return 3;
+  }
+  filtered = filtered.slice().sort(function(a, b){
+    var pa = retornoPriority(a), pb = retornoPriority(b);
+    if (pa !== pb) return pa - pb;
+    // within same priority, sort by retorno_contato date ascending (nulls last)
+    var ra = a.retorno_contato ? a.retorno_contato.slice(0,10) : 'zzz';
+    var rb = b.retorno_contato ? b.retorno_contato.slice(0,10) : 'zzz';
+    return ra.localeCompare(rb);
+  });
   el.innerHTML = '<div class="toolbar" data-scope="contacts"><select class="f-modalidade"><option value="all">Todas as modalidades</option>'+
     MODALIDADES.map(function(m){return '<option value="'+m.id+'">'+m.id+'</option>';}).join('')+'</select>'+
     '<select class="f-statusLead"><option value="all">Todos os status de lead</option>'+STATUS_LEAD.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('')+'</select>'+
