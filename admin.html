@@ -332,6 +332,14 @@
         <select id="ld-status-lead"></select>
       </div>
     </div>
+    <div class="row2" style="margin-bottom:14px;">
+      <div class="field" style="margin-bottom:0;"><label>Responsável pelo atendimento</label>
+        <select id="ld-responsavel"></select>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>Origem</label>
+        <input id="ld-origem" type="text" readonly style="background:#F5F6FA;cursor:default;">
+      </div>
+    </div>
     <div class="field" style="margin-bottom:14px;">
       <label>Motivo (cancelamento, remarcação…)</label>
       <input id="ld-motivo" type="text" placeholder="Opcional">
@@ -518,6 +526,7 @@ async function enterAdmin(){
   showScreen('view-admin');
   await refreshBookings();
   STATE.timeSlots = await loadTimeSlots();
+  STATE.equipe = await loadEquipe();
   switchTab('overview');
   if (window._adminPoll) clearInterval(window._adminPoll);
   window._adminPoll = setInterval(refreshBookings, 30000);
@@ -532,7 +541,7 @@ document.getElementById('btn-copy-link').addEventListener('click', function(){
 });
 
 /* ---------------- DATA LAYER (Supabase) ---------------- */
-var STATE = { bookings: [], timeSlots: [], activeTab: 'overview' };
+var STATE = { bookings: [], timeSlots: [], equipe: [], activeTab: 'overview' };
 
 async function loadAllBookings(){
   var res = await sb.from('beat_sports_exp').select('*').order('data',{ascending:true}).order('horario',{ascending:true});
@@ -613,6 +622,30 @@ async function deleteTimeSlot(id){
   if (res.error){ console.error(res.error); toast('Não foi possível remover o horário.'); }
 }
 
+/* ---------------- EQUIPE ---------------- */
+async function loadEquipe(){
+  var res = await sb.from('beat_sports_equipe').select('*').eq('ativo', true).order('nome', {ascending:true});
+  if (res.error){ console.error(res.error); return []; }
+  return res.data;
+}
+async function insertMembro(nome){
+  var res = await sb.from('beat_sports_equipe').insert([{nome:nome, ativo:true}]).select().single();
+  if (res.error){
+    if (res.error.code === '23505') toast('Esse nome já existe na equipe.');
+    else toast('Não foi possível adicionar.');
+    return null;
+  }
+  return res.data;
+}
+async function deleteMembro(id){
+  var res = await sb.from('beat_sports_equipe').delete().eq('id', id);
+  if (res.error){ toast('Não foi possível remover.'); }
+}
+function equipeOptions(selected){
+  return '<option value="">— Sem responsável —</option>'+
+    STATE.equipe.map(function(m){ return '<option value="'+escapeHTML(m.nome)+'"'+(m.nome===selected?' selected':'')+'>'+escapeHTML(m.nome)+'</option>'; }).join('');
+}
+
 async function refreshBookings(){
   document.getElementById('last-updated').textContent = 'Atualizando...';
   STATE.bookings = await loadAllBookings();
@@ -678,6 +711,9 @@ function attachTicketHandlers(container){
     } else if (t.classList.contains('notes-input')){
       var b3 = await patchBooking(t.dataset.id, {observacoes: t.value});
       if (b3){ updateLocal(b3); toast('Observação salva.'); }
+    } else if (t.classList.contains('responsavel-select')){
+      var b6 = await patchBooking(t.dataset.id, {responsavel: t.value});
+      if (b6){ updateLocal(b6); toast('Responsável atualizado.'); }
     } else if (t.classList.contains('status-lead-select')){
       var b4 = await patchBooking(t.dataset.id, {status_lead: t.value});
       if (b4){ updateLocal(b4); toast('Status do lead atualizado.'); }
@@ -711,6 +747,21 @@ function renderOverview(){
     '<div class="mod-breakdown"><h3>Procura por modalidade</h3>'+
       modCounts.map(function(m){ return '<div class="mod-bar-row"><span class="lbl">'+m.id+'</span><div class="mod-bar-track"><div class="mod-bar-fill" style="width:'+((m.n/maxN)*100)+'%;background:'+m.color+'"></div></div><span class="n">'+m.n+'</span></div>'; }).join('')+
     '</div>'+
+    '<div class="settings-card"><h3>Equipe</h3>'+
+      '<p style="font-size:.82rem;color:var(--ink-soft);margin-bottom:12px;">Adicione os nomes de quem atende os leads. Eles aparecem como opção de responsável no kanban e na ficha do cliente.</p>'+
+      '<div id="equipe-list" style="margin-bottom:12px;">'+
+        (STATE.equipe.length ? STATE.equipe.map(function(m){
+          return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #F0F1F7;">'+
+            '<span style="flex:1;font-size:.88rem;font-weight:600;">'+escapeHTML(m.nome)+'</span>'+
+            '<button type="button" class="btn btn-danger btn-sm equipe-del-btn" data-id="'+m.id+'" style="padding:4px 10px;font-size:.75rem;">remover</button>'+
+          '</div>';
+        }).join('') : '<p style="font-size:.82rem;color:var(--ink-soft);">Nenhum membro cadastrado ainda.</p>')+
+      '</div>'+
+      '<div style="display:flex;gap:8px;">'+
+        '<input type="text" id="new-membro-input" placeholder="Nome do membro" style="flex:1;padding:9px 12px;border:1.5px solid #D0D4DC;border-radius:9px;font-size:.88rem;">'+
+        '<button type="button" class="btn btn-ghost btn-sm" id="btn-add-membro">+ Adicionar</button>'+
+      '</div>'+
+    '</div>'+
     '<div class="settings-card"><h3>Conta administrativa</h3>'+
       '<p style="font-size:.85rem;color:var(--ink-soft);margin-bottom:14px;">Para alterar e-mail ou senha de acesso, use o painel do Supabase (Authentication → Users), ou peça para o admin redefinir por lá.</p>'+
       '<div class="danger-zone"><p>Apagar todos os agendamentos é irreversível. Use apenas para limpar dados de teste.</p>'+
@@ -726,6 +777,35 @@ function renderOverview(){
     await deleteAllBookings();
     toast('Todos os agendamentos foram apagados.');
     await refreshBookings();
+  });
+
+  document.getElementById('btn-add-membro').addEventListener('click', async function(){
+    var input = document.getElementById('new-membro-input');
+    var nome = input.value.trim();
+    if (!nome){ toast('Informe o nome do membro.'); return; }
+    var created = await insertMembro(nome);
+    if (created){
+      STATE.equipe.push(created);
+      STATE.equipe.sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt'); });
+      input.value = '';
+      toast(nome+' adicionado à equipe.');
+      renderOverview();
+    }
+  });
+  document.getElementById('new-membro-input').addEventListener('keydown', function(e){
+    if (e.key==='Enter'){ e.preventDefault(); document.getElementById('btn-add-membro').click(); }
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.equipe-del-btn'), function(btn){
+    btn.addEventListener('click', async function(){
+      var id = btn.dataset.id;
+      var nome = btn.parentElement.querySelector('span').textContent;
+      var ok = await showConfirmModal('Remover '+nome+' da equipe?', 'Leads já atribuídos a este membro não serão alterados.', 'Sim, remover');
+      if (!ok) return;
+      await deleteMembro(id);
+      STATE.equipe = STATE.equipe.filter(function(m){ return m.id !== id; });
+      toast(nome+' removido da equipe.');
+      renderOverview();
+    });
   });
 }
 
@@ -902,7 +982,9 @@ function renderLeads(){
           '<div class="name">'+escapeHTML(b.nome)+'</div>'+
           '<div class="sub">'+b.modalidade+' · '+formatDateBR(b.data)+' '+(b.horario?b.horario.slice(0,5):'')+'</div>'+
           '<div class="sub">'+escapeHTML(b.telefone)+'</div>'+
-          '<select class="status-lead-select" data-id="'+b.id+'">'+selectOptions(STATUS_LEAD,b.status_lead)+'</select>'+
+          (STATE.equipe.length ?
+            '<select class="responsavel-select" data-id="'+b.id+'" style="width:100%;margin-top:8px;padding:6px 8px;border:1.5px solid #D0D4DC;border-radius:8px;font-size:.74rem;color:var(--ink);">'+equipeOptions(b.responsavel)+'</select>'
+            : '<div style="font-size:.72rem;color:var(--ink-soft);margin-top:6px;font-style:italic;">Cadastre membros em Visão Geral</div>')+
         '</div>';
       }).join('')+
     '</div>';
@@ -1076,6 +1158,8 @@ function openLeadDetail(id){
   document.getElementById('ld-hora').value = b.horario ? b.horario.slice(0,5) : '';
   document.getElementById('ld-status-aula').innerHTML = selectOptions(STATUS_AULA, b.status_aula);
   document.getElementById('ld-status-lead').innerHTML = selectOptions(STATUS_LEAD, b.status_lead);
+  document.getElementById('ld-responsavel').innerHTML = equipeOptions(b.responsavel || '');
+  document.getElementById('ld-origem').value = b.origem || '—';
   document.getElementById('ld-motivo').value = b.motivo || '';
   document.getElementById('ld-obs').value = b.observacoes || '';
   document.getElementById('ld-retorno').value = b.retorno_contato ? b.retorno_contato.slice(0,10) : '';
@@ -1116,6 +1200,7 @@ document.getElementById('btn-ld-save').addEventListener('click', async function(
     horario: document.getElementById('ld-hora').value,
     status_aula: document.getElementById('ld-status-aula').value,
     status_lead: document.getElementById('ld-status-lead').value,
+    responsavel: document.getElementById('ld-responsavel').value,
     motivo: document.getElementById('ld-motivo').value.trim(),
     observacoes: document.getElementById('ld-obs').value.trim(),
     retorno_contato: document.getElementById('ld-retorno').value || null
